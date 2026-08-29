@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDA & Keyword Heatmap Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card { border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; border: none; }
+        #heatmap { width: 100%; height: 650px; min-height: 400px; }
+        .table-responsive { max-height: 500px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h2 class="mb-4 text-center fw-bold text-primary">EDA & Keyword Heatmap Visualizer</h2>
+
+        <div class="card p-3">
+            <div id="heatmap"><div class="text-center p-5 text-muted">Loading Heatmap Data...</div></div>
+        </div>
+
+        <div class="card p-4">
+            <h4 id="table-title" class="mb-3 text-secondary">Matching Documents</h4>
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Title</th>
+                            <th>Authors</th>
+                            <th>Year</th>
+                            <th>Source</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="doc-table-body">
+                        <tr><td colspan="6" class="text-center text-muted">Click on any heatmap cell to view corresponding documents.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        fetch('./data.json')
+            .then(response => response.json())
+            .then(data => {
+                const docsData = data.docsData;
+                const years = data.years;
+                const topKeywords = data.topKeywords;
+                const zData = data.zData;
+
+                const trace = {
+                    z: zData,
+                    x: years,
+                    y: topKeywords,
+                    type: 'heatmap',
+                    colorscale: 'Viridis',
+                    hoverongaps: false
+                };
+
+                const layout = {
+                    title: 'Top 25 Keywords Occurrence (2020 - 2025)',
+                    xaxis: { title: 'Year', type: 'category' },
+                    yaxis: { title: 'Keywords', automargin: true },
+                    margin: { l: 150, r: 50, b: 50, t: 50 }
+                };
+
+                Plotly.newPlot('heatmap', [trace], layout);
+
+                document.getElementById('heatmap').on('plotly_click', function(evtData){
+                    if(!evtData.points.length) return;
+                    const pt = evtData.points[0];
+                    const selectedKw = pt.y;
+                    const selectedYear = parseInt(pt.x);
+
+                    const filteredDocs = docsData.filter(d =>
+                        d.year === selectedYear && d.keywords.includes(selectedKw)
+                    );
+
+                    document.getElementById('table-title').innerText = `📄 Documents for "${selectedKw}" in ${selectedYear} (${filteredDocs.length} found)`;
+
+                    const tbody = document.getElementById('doc-table-body');
+                    tbody.innerHTML = '';
+
+                    if(filteredDocs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No documents found.</td></tr>';
+                        return;
+                    }
+
+                    filteredDocs.forEach((doc, i) => {
+                        const safeTitle = escapeHtml(doc.title);
+                        const safeAuthors = escapeHtml(doc.authors);
+                        const safeSource = escapeHtml(doc.source);
+                        const safeLink = escapeHtml(doc.link);
+
+                        const row = `<tr>
+                            <td>${i + 1}</td>
+                            <td><strong>${safeTitle}</strong></td>
+                            <td>${safeAuthors}</td>
+                            <td><span class="badge bg-info text-dark">${doc.year}</span></td>
+                            <td>${safeSource}</td>
+                            <td><a href="${safeLink}" target="_blank" class="btn btn-sm btn-outline-primary">View</a></td>
+                        </tr>`;
+                        tbody.innerHTML += row;
+                    });
+                });
+            })
+            .catch(err => {
+                console.error("Error loading JSON:", err);
+                document.getElementById('heatmap').innerHTML = '<div class="alert alert-danger p-4">Error loading data.json: ' + err.message + '</div>';
+            });
+    </script>
+</body>
+</html>
